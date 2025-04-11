@@ -211,8 +211,8 @@
                             <strong>Last Updated:</strong> <span id="last-updated">Loading...</span>
                         </p>
                         <p>
-                            <a href="https://github.com/YourUsername/gpu-benchmarks" class="btn btn-primary" target="_blank">GitHub Repository</a>
-                            <a href="https://github.com/YourUsername/gpu-benchmarks/blob/main/CONTRIBUTING.md" class="btn btn-outline-secondary" target="_blank">Contribute Your Results</a>
+                            <a href="https://github.com/levinale-github/GPU-performance-comparison-testing" class="btn btn-primary" target="_blank">GitHub Repository</a>
+                            <a href="https://github.com/levinale-github/GPU-performance-comparison-testing/blob/main/CONTRIBUTING.md" class="btn btn-outline-secondary" target="_blank">Contribute Your Results</a>
                         </p>
                     </div>
                 </div>
@@ -236,7 +236,8 @@
         // Fetch and process data
         async function fetchData() {
             try {
-                const response = await fetch('../results/aggregated_results.json');
+                // Update path to work with GitHub Pages
+                const response = await fetch('./aggregated_results.json');
                 const data = await response.json();
                 
                 // Update last updated timestamp

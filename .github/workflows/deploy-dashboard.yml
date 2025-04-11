@@ -1,0 +1,29 @@
+name: Deploy GPU Performance Comparison Dashboard
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Generate latest aggregated results
+        run: |
+          pip install -r requirements.txt
+          python tools/combine_results.py
+      
+      - name: Prepare dashboard for deployment
+        run: |
+          # Copy aggregated results to dashboard folder (since GitHub Pages might not handle symlinks well)
+          cp results/aggregated_results.json dashboard/
+      
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: dashboard
+          branch: gh-pages
+          clean: true 
