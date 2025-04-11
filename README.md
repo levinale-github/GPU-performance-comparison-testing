@@ -61,7 +61,7 @@ You will also have a detailed log file (e.g., `myGPU_run.log`) capturing the con
 
 ## Viewing and Comparing Results
 
-All contributed results are visible on our **Public Dashboard**: **GPU Benchmark Dashboard**. There, you can interactively compare different GPUs on various metrics. For quick reference, we also maintain a **Results Summary** table in the results file in this repo.
+All contributed results are visible on our **Public Dashboard**: [**GPU Benchmark Dashboard**](https://levinale-github.github.io/GPU-performance-comparison-testing/). There, you can interactively compare different GPUs on various metrics. For quick reference, we also maintain a **Results Summary** table in the results file in this repo.
 
 Some things you can discover:
 
@@ -100,9 +100,9 @@ If you are new to GPUs and trying to make sense of the numbers: we have you cove
 
 ## Project Dashboard and Website
 
-All the data collected is aggregated and shown on our dashboard website. In addition, we may post occasional analysis or summaries in the repository Wiki or a `/docs` article (for those who prefer reading a report).
+All the data collected is aggregated and shown on our [dashboard website](https://levinale-github.github.io/GPU-performance-comparison-testing/). In addition, we may post occasional analysis or summaries in the repository Wiki or a `/docs` article (for those who prefer reading a report).
 
-The dashboard is hosted on a free platform (currently using Vercel). If it's ever down or you prefer offline access, you can generate the charts yourself: the raw data is in `results/aggregated_results.csv` – feel free to download and plug it into your own spreadsheet or analysis tool.
+The dashboard is hosted using GitHub Pages. If it's ever down or you prefer offline access, you can generate the charts yourself: the raw data is in `results/aggregated_results.json` – feel free to download and plug it into your own spreadsheet or analysis tool.
 
 ## Roadmap
 
