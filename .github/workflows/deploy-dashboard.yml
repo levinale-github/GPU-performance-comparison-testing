@@ -18,7 +18,8 @@ jobs:
       
       - name: Prepare dashboard for deployment
         run: |
-          # Copy aggregated results to dashboard folder (since GitHub Pages might not handle symlinks well)
+          # Remove the symbolic link first and then copy the file
+          rm -f dashboard/aggregated_results.json
           cp results/aggregated_results.json dashboard/
       
       - name: Deploy to GitHub Pages

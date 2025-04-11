@@ -92,8 +92,6 @@ If you are new to GPUs and trying to make sense of the numbers: we have you cove
 
 * **Use Our Dashboard:** Filter by the type of workload that matters to you. For example, if you do a lot of 3D rendering, see which GPUs top the Blender or GLMark2 charts. If you do machine learning, look at the ResNet inference results or tensor core tests.
 
-* **Compare GPU Specs:** It's also useful to compare technical specs of GPUs side by side. We recommend using **BrainyBuyer's Graphics Cards comparison tool** to directly compare specs and prices of GPUs you have in mind.
-
 * **Don't Have a GPU Yet?** If you're looking to purchase a GPU, you can compare features and prices across various models at [BrainyBuyer's Graphics Cards category](https://www.brainybuyer.com/categories/284822-1/graphics-cards). This can help you find the best value for your specific needs and budget constraints.
 
 * **Community Help:** Feel free to open a discussion or issue in this repo if you want advice. The community of contributors might share insights (e.g., if a certain GPU has known driver issues affecting performance, or if a new GPU release is around the corner that's worth waiting for).
