@@ -17,17 +17,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      - name: Generate latest aggregated results
-        run: |
-          pip install -r requirements.txt
-          python tools/combine_results.py
-      
-      - name: Prepare dashboard for deployment
-        run: |
-          # Remove the symbolic link first and then copy the file
-          rm -f dashboard/aggregated_results.json
-          cp results/aggregated_results.json dashboard/
-      
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:

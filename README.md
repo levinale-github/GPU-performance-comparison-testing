@@ -74,13 +74,12 @@ Some things you can discover:
 
 **We welcome contributions!** If you've run the benchmarks on your GPU, you can submit your results to be included in our database. Here's how:
 
-1. **Run the benchmarks** using the instructions above. Ensure you get a results file (JSON/CSV) and save the log file.
+1. **Run the benchmarks** using the instructions above. Ensure you get a results file (JSON) and save the log file.
 2. **Fork this repository** (click the "Fork" button in GitHub).
 3. **Add your results** in the `results/submissions/` folder. You can name the file descriptively, for example: `2025-04-10_NVIDIA_GTX1080Ti.json`. 
 4. **Privacy Note:** Log files may contain personally identifiable information (PII) such as usernames in file paths. If you choose to include your log file, please review it and redact any personal information. Alternatively, you can submit just your results JSON file without the log. See CONTRIBUTING.md for detailed guidance on handling PII.
-5. **(Optional) Update** the `results/aggregated_results.csv` by running our provided aggregation script (`python tools/combine_results.py`) – this will pull in your new data. If you're not comfortable doing this, don't worry, maintainers can do it.
-6. **Open a Pull Request (PR)** from your fork to this repo's `main` branch. In the PR description, mention what GPU and driver the results are for, and any notes (if, say, you did something special like overclocking).
-7. A maintainer will review your submission. They will check the data format and may cross-verify with your log. If everything looks good, we'll merge it in! After merge, the dashboard will update and your GPU's results will be part of the public comparison.
+5. **Open a Pull Request (PR)** from your fork to this repo's `main` branch. In the PR description, mention what GPU and driver the results are for, and any notes (if, say, you did something special like overclocking).
+6. A maintainer will review your submission. They will check the data format and may cross-verify with your log. If everything looks good, we'll merge it in! After merge, the dashboard will automatically update to include your GPU's results.
 
 Please see CONTRIBUTING.md for more details on the process and data format. We want to ensure all results are **credible and reproducible**, so we might ask for clarifications.
 
@@ -100,9 +99,9 @@ If you are new to GPUs and trying to make sense of the numbers: we have you cove
 
 ## Project Dashboard and Website
 
-All the data collected is aggregated and shown on our [dashboard website](https://levinale-github.github.io/GPU-performance-comparison-testing/). In addition, we may post occasional analysis or summaries in the repository Wiki or a `/docs` article (for those who prefer reading a report).
+All the data collected is aggregated and shown on our [dashboard website](https://levinale-github.github.io/GPU-performance-comparison-testing/). The dashboard automatically reads and processes all JSON files in the `results/submissions/` directory, so there's no need to maintain a separate aggregated results file. In addition, we may post occasional analysis or summaries in the repository Wiki or a `/docs` article (for those who prefer reading a report).
 
-The dashboard is hosted using GitHub Pages. If it's ever down or you prefer offline access, you can generate the charts yourself: the raw data is in `results/aggregated_results.json` – feel free to download and plug it into your own spreadsheet or analysis tool.
+The dashboard is hosted using GitHub Pages. If you prefer offline access, you can download any of the JSON files from the `results/submissions/` directory and use them in your own analysis tools.
 
 ## Roadmap
 
