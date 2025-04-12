@@ -39,6 +39,11 @@ RESULTS_LOGS_DIR = RESULTS_DIR / "logs"
 RESULTS_SUBMISSIONS_DIR.mkdir(exist_ok=True, parents=True)
 RESULTS_LOGS_DIR.mkdir(exist_ok=True, parents=True)
 
+# Add tools directory to path
+sys.path.append(str(Path(__file__).parent / 'tools'))
+
+from gather_system_info import get_system_info
+
 def detect_gpu():
     """
     Attempts to detect the GPU model and driver version.
@@ -122,65 +127,6 @@ def detect_gpu():
         logger.error(f"Error detecting GPU: {e}")
     
     return gpu_info
-
-def get_system_info():
-    """
-    Gathers information about the system.
-    Returns a dictionary with system information.
-    """
-    sys_info = {
-        "OS": f"{platform.system()} {platform.release()}",
-        "CPUModel": "Unknown",
-        "RAMSize": "Unknown"
-    }
-    
-    # Get CPU info
-    if platform.system() == "Windows":
-        import wmi
-        w = wmi.WMI()
-        proc_info = w.Win32_Processor()[0]
-        sys_info["CPUModel"] = proc_info.Name
-        
-        # Get RAM in GB
-        mem_info = w.Win32_ComputerSystem()[0]
-        ram_gb = round(int(mem_info.TotalPhysicalMemory) / (1024**3))
-        sys_info["RAMSize"] = f"{ram_gb} GB"
-        
-    elif platform.system() == "Linux":
-        try:
-            # Get CPU model from /proc/cpuinfo
-            with open("/proc/cpuinfo", "r") as f:
-                for line in f:
-                    if "model name" in line:
-                        sys_info["CPUModel"] = line.split(":")[-1].strip()
-                        break
-                        
-            # Get RAM from /proc/meminfo
-            with open("/proc/meminfo", "r") as f:
-                for line in f:
-                    if "MemTotal" in line:
-                        ram_kb = int(line.split()[1])
-                        ram_gb = round(ram_kb / (1024**2))
-                        sys_info["RAMSize"] = f"{ram_gb} GB"
-                        break
-        except:
-            logger.warning("Failed to read system info on Linux")
-            
-    elif platform.system() == "Darwin":  # macOS
-        try:
-            # Get CPU info on macOS
-            output = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True)
-            sys_info["CPUModel"] = output.strip()
-            
-            # Get RAM info
-            output = subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True)
-            ram_bytes = int(output.strip())
-            ram_gb = round(ram_bytes / (1024**3))
-            sys_info["RAMSize"] = f"{ram_gb} GB"
-        except:
-            logger.warning("Failed to get system info on macOS")
-    
-    return sys_info
 
 def run_benchmark_script(script_path):
     """

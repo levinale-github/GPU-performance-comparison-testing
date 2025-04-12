@@ -1,15 +1,10 @@
-name: Deploy GPU Performance Comparison Dashboard
+name: Deploy Dashboard
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   workflow_dispatch:
-
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
-permissions:
-  contents: write
-  pages: write
-  id-token: write
 
 jobs:
   deploy:
@@ -17,10 +12,22 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          folder: dashboard
-          branch: gh-pages
-          token: ${{ secrets.GITHUB_TOKEN }}
-          clean: true 
+          python-version: '3.10'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+      - name: Aggregate results
+        run: python tools/aggregate_results.py
+          
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dashboard
+          publish_branch: gh-pages 
