@@ -46,10 +46,6 @@ benchmark_run.log
 /results/logs/
 /results/logs/*.log
 
-# Allow aggregated results but not individual submissions that might contain PII
-/results/submissions/*.json
-!/results/submissions/2023-08-15_NVIDIA_RTX3080.json
-
 # Keep the symbolic link in git but not the actual file for GitHub Pages
 dashboard/aggregated_results.json
 !dashboard/aggregated_results.json

@@ -1,0 +1,40 @@
+{
+  "metadata": {
+    "system": {
+      "os": "Darwin 24.3.0",
+      "cpu": {
+        "model": "Apple M4 Max",
+        "processor_count": 16
+      },
+      "memory": {
+        "MemTotal": "67108864 kB"
+      },
+      "gpu": {
+        "GPU": "Apple M4 Max",
+        "GPUVendor": "Apple (0x106b)",
+        "Driver": "Unknown",
+        "VRAM": "Unknown"
+      }
+    },
+    "contributor": "MacBook Pro User",
+    "timestamp": "2025-04-12T18:08:26.743282",
+    "runtime": 20.12175226211548,
+    "notes": "MacBook Pro with Apple Silicon M4 Max using MPS"
+  },
+  "results": {
+    "memory": {},
+    "compute": {},
+    "graphics": {
+      "error": "Failed to parse JSON output: Extra data: line 1 column 152 (char 151)",
+      "raw_output": "pygame 2.6.1 (SDL 2.28.4, Python 3.13.2)\nHello from the pygame community. https://www.pygame.org/contribute.html\n{\"error\": null, \"graphics_info\": {\"Vendor\": \"Apple\", \"Renderer\": \"Apple M4 Max\", \"OpenGLVersion\": \"2.1 Metal - 89.3\"}, \"SimpleOpenGLScore\": 301, \"TestDetails\": {\"Triangles_100\": 2199.5055001520204, \"Triangles_1000\": 335.69519634102215, \"Triangles_10000\": 38.31438154294306, \"Triangles_50000\": 7.829466639910772}}"
+    },
+    "ai": {
+      "error": "Failed to parse JSON output: Extra data: line 8 column 1 (char 166)",
+      "raw_output": "{\n  \"ResNet50Inference\": 0,\n  \"ResNet50InferenceUnit\": \"images/sec\",\n  \"OptimalBatchSize\": 1,\n  \"OptimalModel\": \"resnet50\",\n  \"DetailedResults\": {\n    \"resnet50\": {}\n  },\n  \"DeviceInfo\": {\n    \"device\": \"MPS GPU\",\n    \"device_name\": \"Apple Silicon GPU\",\n    \"mps_available\": true,\n    \"pytorch_version\": \"2.6.0\",\n    \"torchvision_version\": \"0.21.0\"\n  }\n}"
+    },
+    "pcie": {
+      "error": "Failed to parse JSON output: Extra data: line 8 column 1 (char 160)",
+      "raw_output": "{\n  \"TransferPCIe\": 47.82109696069589,\n  \"TransferPCIeUnit\": \"GB/s\",\n  \"TransferH2D\": 41.03731982951684,\n  \"TransferH2DUnit\": \"GB/s\",\n  \"TransferD2H\": 47.82109696069589,\n  \"TransferD2HUnit\": \"GB/s\",\n  \"PCIeGeneration\": \"PCIe 4.0 x16 or better\",\n  \"DetailedResults\": {\n    \"16\": {\n      \"h2d_bandwidth\": 23.629531288671593,\n      \"d2h_bandwidth\": 25.700783118211834\n    },\n    \"64\": {\n      \"h2d_bandwidth\": 30.598432080732252,\n      \"d2h_bandwidth\": 47.82109696069589\n    },\n    \"256\": {\n      \"h2d_bandwidth\": 40.31726372708673,\n      \"d2h_bandwidth\": 43.98390135333323\n    },\n    \"1024\": {\n      \"h2d_bandwidth\": 41.03731982951684,\n      \"d2h_bandwidth\": 41.10774058354171\n    }\n  },\n  \"DeviceInfo\": {\n    \"backend\": \"OpenCL\",\n    \"device\": \"Apple M4 Max\",\n    \"pcie_version\": \"PCIe 3.0 (estimated)\",\n    \"platform\": \"Darwin\",\n    \"platform_name\": \"Apple\"\n  }\n}"
+    }
+  }
+}
