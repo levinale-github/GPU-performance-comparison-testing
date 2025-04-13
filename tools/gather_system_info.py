@@ -81,17 +81,107 @@ def get_apple_gpu_info():
     try:
         if platform.system() == 'Darwin' and platform.machine() == 'arm64':
             # Get GPU info from system profiler
-            result = subprocess.run(['system_profiler', 'SPDisplaysDataType'], capture_output=True, text=True)
+            result = subprocess.run(['system_profiler', 'SPDisplaysDataType', '-json'], capture_output=True, text=True)
             if result.returncode == 0:
-                gpu_info = {}
-                for line in result.stdout.split('\n'):
-                    if 'Chipset Model:' in line:
-                        gpu_info['name'] = line.split(':', 1)[1].strip()
-                    elif 'VRAM (Total):' in line:
-                        gpu_info['memory_total'] = line.split(':', 1)[1].strip()
+                try:
+                    # Try to parse the JSON output for more structured data
+                    data = json.loads(result.stdout)
+                    displays = data.get('SPDisplaysDataType', [])
+                    for display in displays:
+                        if 'spdisplays_mtlgpufamilysupport' in display:  # Metal GPU
+                            gpu_info = {
+                                'GPU': display.get('spdisplays_device-name', ''),
+                                'GPUVendor': 'Apple',
+                                'VRAM': display.get('spdisplays_vram', ''),
+                                'MetalFamily': display.get('spdisplays_mtlgpufamilysupport', ''),
+                                'DisplayType': display.get('spdisplays_display_type', ''),
+                                'CoreCount': display.get('spdisplays_gpu_cores', ''),
+                                'Resolution': display.get('spdisplays_resolution', ''),
+                                'DeviceID': display.get('spdisplays_device-id', '')
+                            }
+                            
+                            # Add additional details for Apple Silicon GPUs
+                            # Try to get GPU frequency
+                            try:
+                                freq_result = subprocess.run(['sysctl', '-n', 'hw.gpufrequency'], capture_output=True, text=True)
+                                if freq_result.returncode == 0 and freq_result.stdout.strip():
+                                    gpu_info['ClockFrequency'] = f"{int(freq_result.stdout.strip()) / 1000000} MHz"
+                            except:
+                                pass
+                                
+                            if 'Apple' in gpu_info['GPU'] or (not gpu_info['GPU'] and 'Apple' in platform.processor()):
+                                # Try to identify chip model and extract info
+                                chip_model = ''
+                                try:
+                                    chip_result = subprocess.run(['sysctl', '-n', 'machdep.cpu.brand_string'], 
+                                                              capture_output=True, text=True)
+                                    if chip_result.returncode == 0:
+                                        chip_model = chip_result.stdout.strip()
+                                        # Extract the chip identifier (M1, M2, etc.)
+                                        chip_match = re.search(r'Apple (M\d+)( [A-Za-z]+)?', chip_model)
+                                        if chip_match:
+                                            gpu_info['ChipModel'] = chip_match.group(0)
+                                            
+                                            # Estimate core count if not provided
+                                            if not gpu_info['CoreCount']:
+                                                # Estimated GPU cores based on chip model
+                                                chip_type = chip_match.group(1)  # M1, M2, etc.
+                                                chip_variant = chip_match.group(2).strip() if chip_match.group(2) else ''
+                                                
+                                                # Rough estimates based on chip type
+                                                core_estimates = {
+                                                    'M1': {'': 8, 'Pro': 16, 'Max': 32, 'Ultra': 64},
+                                                    'M2': {'': 10, 'Pro': 19, 'Max': 38, 'Ultra': 76},
+                                                    'M3': {'': 10, 'Pro': 20, 'Max': 40, 'Ultra': 80},
+                                                    'M4': {'': 12, 'Pro': 24, 'Max': 48, 'Ultra': 96}
+                                                }
+                                                
+                                                if chip_type in core_estimates and chip_variant in core_estimates[chip_type]:
+                                                    gpu_info['CoreCount'] = str(core_estimates[chip_type][chip_variant])
+                                except:
+                                    pass
+                                
+                            apple_info.append(gpu_info)
+                except json.JSONDecodeError:
+                    # Fall back to text parsing if JSON fails
+                    gpu_info = {'GPUVendor': 'Apple'}
+                    for line in result.stdout.split('\n'):
+                        line = line.strip()
+                        if ':' in line:
+                            key, value = line.split(':', 1)
+                            key = key.strip()
+                            value = value.strip()
+                            
+                            if 'Chipset Model' in key:
+                                gpu_info['GPU'] = value
+                            elif 'Vendor' in key:
+                                gpu_info['GPUVendor'] = value
+                            elif 'VRAM' in key:
+                                gpu_info['VRAM'] = value
+                            elif 'Metal Family' in key:
+                                gpu_info['MetalFamily'] = value
+                            elif 'Resolution' in key:
+                                gpu_info['Resolution'] = value
+                            elif 'Device ID' in key:
+                                gpu_info['DeviceID'] = value
+                    
+                    if gpu_info:
+                        apple_info.append(gpu_info)
+                        
+            # Get additional thermal/power info for more comprehensive data
+            try:
+                powermetrics_result = subprocess.run(['sudo', 'powermetrics', '-n', '1', '-i', '1000', '--samplers', 'gpu_power'], 
+                                                    capture_output=True, text=True, timeout=2)
+                if powermetrics_result.returncode == 0:
+                    for line in powermetrics_result.stdout.split('\n'):
+                        if 'GPU power:' in line:
+                            power_value = line.split(':', 1)[1].strip()
+                            if apple_info and isinstance(apple_info[0], dict):
+                                apple_info[0]['PowerUsage'] = power_value
+            except:
+                # Powermetrics requires sudo, so this might fail - that's okay
+                pass
                 
-                if gpu_info:
-                    apple_info.append(gpu_info)
     except Exception as e:
         print(f"Error getting Apple GPU info: {e}")
         apple_info.append({'error': str(e)})

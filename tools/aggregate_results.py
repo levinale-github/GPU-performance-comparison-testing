@@ -56,6 +56,12 @@ def aggregate_results():
                     gpu_info['system']['cpu'] = system.get('cpu', {})
                     gpu_info['system']['memory'] = system.get('memory', {})
                     gpu_info['system']['os'] = system.get('os', 'Unknown')
+                    
+                    # Preserve all GPU information fields
+                    if 'gpu' in system:
+                        # Copy all GPU fields as-is
+                        gpu_info['system']['gpu'] = system['gpu']
+                    
                     gpu_info['contributor'] = metadata.get('contributor', 'Unknown')
                     gpu_info['notes'] = metadata.get('notes', '')
                 # Handle the old format without system key

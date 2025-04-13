@@ -53,7 +53,11 @@ def detect_gpu():
         "GPU": "Unknown",
         "GPUVendor": "Unknown",
         "Driver": "Unknown",
-        "VRAM": "Unknown"
+        "VRAM": "Unknown",
+        "Cores": "Unknown",
+        "ClockSpeed": "Unknown",
+        "Architecture": "Unknown",
+        "PCIeBandwidth": "Unknown"
     }
     
     try:
@@ -70,13 +74,51 @@ def detect_gpu():
                 # Determine vendor from name
                 if "NVIDIA" in gpu.Name.upper():
                     gpu_info["GPUVendor"] = "NVIDIA"
+                    # For NVIDIA, try to get more info using nvidia-smi
+                    try:
+                        nvidia_smi_output = subprocess.check_output(["nvidia-smi", "--query-gpu=name,driver_version,memory.total,pci.bus_id,clocks.max.sm,pci.link.width.max,compute_cap", "--format=csv,noheader"], text=True)
+                        lines = nvidia_smi_output.strip().split('\n')
+                        if lines:
+                            parts = lines[0].split(',')
+                            if len(parts) >= 7:
+                                gpu_info["Driver"] = parts[1].strip()
+                                gpu_info["VRAM"] = parts[2].strip()
+                                gpu_info["ClockSpeed"] = parts[4].strip()
+                                gpu_info["PCIeBandwidth"] = f"PCIe x{parts[5].strip()}"
+                                gpu_info["Architecture"] = f"Compute Capability {parts[6].strip()}"
+                                
+                                # Try to get core count
+                                try:
+                                    sm_count_output = subprocess.check_output(["nvidia-smi", "--query-gpu=count", "--format=csv,noheader"], text=True)
+                                    gpu_info["Cores"] = f"{int(sm_count_output.strip()) * 128} CUDA Cores (estimated)"
+                                except:
+                                    pass
+                    except:
+                        # Fall back to basic WMI info
+                        gpu_info["Driver"] = gpu.DriverVersion
+                        gpu_info["VRAM"] = f"{int(gpu.AdapterRAM / (1024**2))} MB" if hasattr(gpu, "AdapterRAM") else "Unknown"
+                        
                 elif "AMD" in gpu.Name.upper() or "RADEON" in gpu.Name.upper():
                     gpu_info["GPUVendor"] = "AMD"
+                    gpu_info["Driver"] = gpu.DriverVersion
+                    gpu_info["VRAM"] = f"{int(gpu.AdapterRAM / (1024**2))} MB" if hasattr(gpu, "AdapterRAM") else "Unknown"
+                    # For AMD, look for known GPU models to estimate core count and architecture
+                    if hasattr(gpu, "Name"):
+                        name = gpu.Name.upper()
+                        if "RX 6900" in name:
+                            gpu_info["Architecture"] = "RDNA 2"
+                            gpu_info["Cores"] = "5120 Stream Processors"
+                        elif "RX 6800" in name:
+                            gpu_info["Architecture"] = "RDNA 2"
+                            gpu_info["Cores"] = "3840-4608 Stream Processors"
+                        elif "RX 7900" in name:
+                            gpu_info["Architecture"] = "RDNA 3"
+                            gpu_info["Cores"] = "6144 Stream Processors"
+                            
                 elif "INTEL" in gpu.Name.upper():
                     gpu_info["GPUVendor"] = "Intel"
-                
-                gpu_info["Driver"] = gpu.DriverVersion
-                gpu_info["VRAM"] = f"{int(gpu.AdapterRAM / (1024**2))} MB" if hasattr(gpu, "AdapterRAM") else "Unknown"
+                    gpu_info["Driver"] = gpu.DriverVersion
+                    gpu_info["VRAM"] = f"{int(gpu.AdapterRAM / (1024**2))} MB" if hasattr(gpu, "AdapterRAM") else "Unknown"
                 
         elif platform.system() == "Linux":
             # On Linux, try lspci and glxinfo
@@ -89,9 +131,40 @@ def detect_gpu():
                         if "NVIDIA" in line:
                             gpu_info["GPUVendor"] = "NVIDIA"
                             gpu_info["GPU"] = line.split(":")[-1].strip()
+                            
+                            # Try to get additional NVIDIA info using nvidia-smi
+                            try:
+                                nvidia_smi = subprocess.check_output(["nvidia-smi", "--query-gpu=name,driver_version,memory.total,pci.bus_id,clocks.max.sm,pci.link.width.max,compute_cap", "--format=csv,noheader"], text=True)
+                                fields = nvidia_smi.strip().split(',')
+                                if len(fields) >= 7:
+                                    gpu_info["Driver"] = fields[1].strip()
+                                    gpu_info["VRAM"] = fields[2].strip()
+                                    gpu_info["ClockSpeed"] = fields[4].strip()
+                                    gpu_info["PCIeBandwidth"] = f"PCIe x{fields[5].strip()}"
+                                    gpu_info["Architecture"] = f"Compute Capability {fields[6].strip()}"
+                                    
+                                    # Get CUDA core count if available
+                                    try:
+                                        nvidia_smi_cores = subprocess.check_output(["nvidia-smi", "--query-gpu=count", "--format=csv,noheader"], text=True)
+                                        sm_count = int(nvidia_smi_cores.strip())
+                                        compute_cap = fields[6].strip()
+                                        cores_per_sm = 64  # Default
+                                        if compute_cap.startswith('7'):  # Volta/Turing
+                                            cores_per_sm = 64
+                                        elif compute_cap.startswith('8'):  # Ampere
+                                            cores_per_sm = 128
+                                        elif compute_cap.startswith('9'):  # Ada/Hopper
+                                            cores_per_sm = 128
+                                        gpu_info["Cores"] = f"{sm_count * cores_per_sm} CUDA Cores"
+                                    except:
+                                        pass
+                            except:
+                                pass
+                                
                         elif "AMD" in line or "ATI" in line:
                             gpu_info["GPUVendor"] = "AMD"
                             gpu_info["GPU"] = line.split(":")[-1].strip()
+                            
                         elif "Intel" in line:
                             gpu_info["GPUVendor"] = "Intel"
                             gpu_info["GPU"] = line.split(":")[-1].strip()
@@ -103,25 +176,89 @@ def detect_gpu():
                         gpu_info["Driver"] = line.split(":")[-1].strip()
                     if "Video memory" in line:
                         gpu_info["VRAM"] = line.split(":")[-1].strip()
+                    if "OpenGL renderer string" in line and gpu_info["GPU"] == "Unknown":
+                        gpu_info["GPU"] = line.split(":")[-1].strip()
+                    if "Max core profile version" in line:
+                        gpu_info["Architecture"] = f"OpenGL {line.split(':')[-1].strip()}"
             except (subprocess.SubprocessError, FileNotFoundError):
                 logger.warning("Failed to get GPU info using lspci/glxinfo")
                 
         elif platform.system() == "Darwin":  # macOS
             try:
-                # Use system_profiler to get GPU info on macOS
-                output = subprocess.check_output(["system_profiler", "SPDisplaysDataType"], text=True)
-                for line in output.split("\n"):
-                    line = line.strip()
-                    if "Chipset Model" in line:
-                        gpu_info["GPU"] = line.split(":")[-1].strip()
-                    if "Vendor" in line:
-                        gpu_info["GPUVendor"] = line.split(":")[-1].strip()
-                    if "VRAM" in line:
-                        gpu_info["VRAM"] = line.split(":")[-1].strip()
-                    if "Metal" in line and "family" in line:
-                        gpu_info["Driver"] = line.split(":")[-1].strip()
-            except (subprocess.SubprocessError, FileNotFoundError):
-                logger.warning("Failed to get GPU info on macOS")
+                # Get Apple Silicon GPU info using specialized function
+                from tools.gather_system_info import get_apple_gpu_info
+                apple_gpus = get_apple_gpu_info()
+                
+                if apple_gpus and isinstance(apple_gpus[0], dict):
+                    main_gpu = apple_gpus[0]
+                    
+                    # Map keys from Apple GPU info to our standardized keys
+                    key_mapping = {
+                        "GPU": "GPU",
+                        "GPUVendor": "GPUVendor",
+                        "VRAM": "VRAM",
+                        "MetalFamily": "Driver",
+                        "CoreCount": "Cores",
+                        "ClockFrequency": "ClockSpeed",
+                        "ChipModel": "Architecture",
+                        "PowerUsage": "PowerUsage"
+                    }
+                    
+                    for our_key, apple_key in key_mapping.items():
+                        if apple_key in main_gpu and main_gpu[apple_key]:
+                            gpu_info[our_key] = main_gpu[apple_key]
+                            
+                    # If we don't get GPU name, extract it from platform model
+                    if gpu_info["GPU"] == "Unknown" and "Apple" in platform.processor():
+                        try:
+                            model_output = subprocess.check_output(["sysctl", "-n", "hw.model"], text=True).strip()
+                            if model_output:
+                                if "Mac" in model_output:
+                                    gpu_info["GPU"] = f"Apple Integrated Graphics ({model_output})"
+                                else:
+                                    gpu_info["GPU"] = "Apple Integrated Graphics"
+                        except:
+                            pass
+                    
+                    # Use OpenCL to get extra info if not already present
+                    if gpu_info["Cores"] == "Unknown" or gpu_info["ClockSpeed"] == "Unknown":
+                        try:
+                            import pyopencl as cl
+                            platforms = cl.get_platforms()
+                            for platform in platforms:
+                                if "Apple" in platform.name:
+                                    for device in platform.get_devices():
+                                        if gpu_info["Cores"] == "Unknown":
+                                            gpu_info["Cores"] = f"{device.max_compute_units} Compute Units"
+                                        if gpu_info["ClockSpeed"] == "Unknown":
+                                            gpu_info["ClockSpeed"] = f"{device.max_clock_frequency} MHz"
+                                        break
+                        except:
+                            pass
+                else:
+                    # Fall back to system_profiler text parsing if get_apple_gpu_info failed
+                    output = subprocess.check_output(["system_profiler", "SPDisplaysDataType"], text=True)
+                    for line in output.split("\n"):
+                        line = line.strip()
+                        if "Chipset Model" in line:
+                            gpu_info["GPU"] = line.split(":")[-1].strip()
+                        if "Vendor" in line:
+                            gpu_info["GPUVendor"] = line.split(":")[-1].strip()
+                        if "VRAM" in line:
+                            gpu_info["VRAM"] = line.split(":")[-1].strip()
+                        if "Metal" in line and "family" in line:
+                            gpu_info["Driver"] = line.split(":")[-1].strip()
+                    
+                    # Try to get Metal GPU family 
+                    try:
+                        metal_output = subprocess.check_output(["system_profiler", "SPDisplaysDataType", "-detailLevel", "full"], text=True)
+                        for line in metal_output.split("\n"):
+                            if "Metal Family" in line:
+                                gpu_info["Architecture"] = f"Metal {line.split(':')[-1].strip()}"
+                    except:
+                        pass
+            except (subprocess.SubprocessError, FileNotFoundError, ImportError) as e:
+                logger.warning(f"Failed to get GPU info on macOS: {str(e)}")
     
     except Exception as e:
         logger.error(f"Error detecting GPU: {e}")

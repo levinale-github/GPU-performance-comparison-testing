@@ -18,13 +18,35 @@ It's a one-stop collection of GPU benchmark tests and results. We provide easy-t
 - Some benchmarks use additional tools:
   - *OpenCL:* Many tests use OpenCL for cross-platform compatibility. Install an OpenCL runtime for your GPU (e.g., Intel OpenCL drivers for iGPUs, AMD APP SDK for AMD GPUs if not already in driver).  
   - *Optional:* If on Linux, you can install **glmark2** for the graphics test via your package manager. On Windows, our script will download a pre-built GLMark2 or use a simple DirectX sample.
-  - *Python libraries:* If any Python benchmarks are included (e.g., for ML), install the requirements with `pip install -r requirements.txt` (we will include a requirements file as needed).
+  - *Python libraries:* It's strongly recommended to use a virtual environment:
+  ```bash
+  # Create a virtual environment
+  python3 -m venv venv
+  
+  # Activate the virtual environment
+  # On Windows:
+  venv\Scripts\activate
+  # On macOS/Linux:
+  source venv/bin/activate
+  
+  # Install required dependencies
+  pip install -r requirements.txt
+  ```
+  Key dependencies include numpy, torch, and pyopencl, which are required for many of the memory and compute benchmarks.
 
 ### Running the Benchmarks
-To run the full benchmark suite, clone this repository and execute the main script:
+To run the full benchmark suite, clone this repository, set up a virtual environment, and execute the main script:
 ```bash
+# Clone the repository
 git clone https://github.com/YourUsername/gpu-benchmarks.git  
-cd gpu-benchmarks  
+cd gpu-benchmarks
+
+# Set up virtual environment (as described in Prerequisites)
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# Run the benchmarks
 python run_benchmarks.py
 ```
 
@@ -33,10 +55,14 @@ This will sequentially run all the tests in the suite. **Please be patient**, as
 If you prefer to run individual tests (for example, just the memory bandwidth test), you can run the specific script. For instance:
 
 ```bash
-python benchmarks/memory/mem_bandwidth.py
+# Make sure your virtual environment is activated
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Run a specific benchmark
+python benchmarks/memory/memory_bandwidth.py
 ```
 
-(Above is just an example; check the `benchmarks/` folder for the actual script names and usage instructions for each test.)
+(Check the `benchmarks/` folder for the actual script names and usage instructions for each test.)
 
 ### Sample Output
 
@@ -69,6 +95,27 @@ Some things you can discover:
 * How integrated GPUs (like Intel Iris or AMD Radeon Vega in APUs) compare against discrete GPUs. (Spoiler: discrete GPUs are much faster, especially in memory-intensive tasks – system RAM is a bottleneck for integrated GPUs).
 * The performance difference between GPU generations (e.g., RTX 20 series vs RTX 30 series).
 * How a cloud GPU instance (like an AWS Tesla T4) compares to a consumer desktop GPU you might have at home.
+
+## Troubleshooting
+
+If you encounter issues when running the benchmarks, here are some common solutions:
+
+### Missing Dependencies
+- **ModuleNotFoundError (numpy, torch, pyopencl, etc.)**: Make sure you've activated your virtual environment and installed all requirements with `pip install -r requirements.txt`.
+- **ImportError: DLL load failed**: For Windows users, this often means you're missing the appropriate Visual C++ Redistributable package. Download and install the latest from Microsoft's website.
+- **OpenCL not available**: Your system may not have an OpenCL implementation installed or it might not be in your PATH. Check your GPU vendor's website for OpenCL drivers.
+
+### Benchmark-Specific Issues
+- **Memory Benchmark Failures**: The memory benchmarks need sufficient GPU memory. If it fails, try reducing the test sizes by adding the `--max-size` parameter (e.g., `python benchmarks/memory/memory_bandwidth.py --max-size 512`).
+- **LuxMark Errors**: The LuxMark benchmark requires downloading external files. Ensure you have a stable internet connection, and if the download fails, you can manually download and place the files in the cache directory (`~/.gpu_benchmark_cache/luxmark/`).
+- **CUDA Out of Memory**: For deep learning benchmarks, try a smaller batch size.
+
+### Platform-Specific Issues
+- **macOS**: On newer Apple Silicon Macs, make sure you're using Python 3.9+ with Universal2 wheels. Most benchmarks should use MPS if available.
+- **Linux**: Some benchmarks may require specific packages. For Ubuntu/Debian: `sudo apt-get install python3-dev libpython3-dev build-essential`.
+- **Windows**: If you get permission errors, try running your terminal as Administrator.
+
+If you're experiencing issues not covered here, please open an issue on the GitHub repo with details about your system and the error messages you're seeing.
 
 ## Contributing Your Results
 
