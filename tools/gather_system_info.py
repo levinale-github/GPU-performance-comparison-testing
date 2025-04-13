@@ -19,6 +19,7 @@ import psutil
 import pynvml  # For NVIDIA GPUs
 import pyopencl as cl  # For OpenCL devices
 from datetime import datetime
+import argparse  # Added for command-line option
 
 def get_cpu_info():
     """Get CPU information"""
@@ -75,7 +76,7 @@ def get_memory_info():
     
     return memory_info
 
-def get_apple_gpu_info():
+def get_apple_gpu_info(skip_powermetrics=False):
     """Get Apple Silicon GPU information"""
     apple_info = []
     try:
@@ -170,14 +171,15 @@ def get_apple_gpu_info():
                         
             # Get additional thermal/power info for more comprehensive data
             try:
-                powermetrics_result = subprocess.run(['sudo', 'powermetrics', '-n', '1', '-i', '1000', '--samplers', 'gpu_power'], 
-                                                    capture_output=True, text=True, timeout=2)
-                if powermetrics_result.returncode == 0:
-                    for line in powermetrics_result.stdout.split('\n'):
-                        if 'GPU power:' in line:
-                            power_value = line.split(':', 1)[1].strip()
-                            if apple_info and isinstance(apple_info[0], dict):
-                                apple_info[0]['PowerUsage'] = power_value
+                if not skip_powermetrics:
+                    powermetrics_result = subprocess.run(['sudo', 'powermetrics', '-n', '1', '-i', '1000', '--samplers', 'gpu_power'], 
+                                                        capture_output=True, text=True, timeout=2)
+                    if powermetrics_result.returncode == 0:
+                        for line in powermetrics_result.stdout.split('\n'):
+                            if 'GPU power:' in line:
+                                power_value = line.split(':', 1)[1].strip()
+                                if apple_info and isinstance(apple_info[0], dict):
+                                    apple_info[0]['PowerUsage'] = power_value
             except:
                 # Powermetrics requires sudo, so this might fail - that's okay
                 pass
@@ -214,7 +216,7 @@ def get_opencl_info():
     
     return opencl_info
 
-def get_system_info():
+def get_system_info(skip_powermetrics=False):
     """Get comprehensive system information"""
     system_info = {
         'platform': {
@@ -230,7 +232,7 @@ def get_system_info():
         },
         'cpu': get_cpu_info(),
         'memory': get_memory_info(),
-        'apple_gpus': get_apple_gpu_info(),
+        'apple_gpus': get_apple_gpu_info(skip_powermetrics),
         'opencl_devices': get_opencl_info(),
         'timestamp': datetime.now().isoformat()
     }
@@ -238,5 +240,11 @@ def get_system_info():
     return system_info
 
 if __name__ == "__main__":
+    # Add command-line argument parsing
+    parser = argparse.ArgumentParser(description="System Information Gatherer")
+    parser.add_argument("--skip-powermetrics", action="store_true", 
+                      help="Skip collecting GPU power metrics (avoids password prompt)")
+    args = parser.parse_args()
+    
     # Print system information as JSON
-    print(json.dumps(get_system_info(), indent=2)) 
+    print(json.dumps(get_system_info(args.skip_powermetrics), indent=2)) 

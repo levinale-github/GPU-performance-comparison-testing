@@ -61,7 +61,9 @@ def detect_gpu():
     }
     
     try:
-        if platform.system() == "Windows":
+        import platform as sys_platform  # Import platform with a different name to avoid conflict
+        
+        if sys_platform.system() == "Windows":
             # On Windows, use WMIC to get GPU info
             import wmi
             w = wmi.WMI()
@@ -120,7 +122,7 @@ def detect_gpu():
                     gpu_info["Driver"] = gpu.DriverVersion
                     gpu_info["VRAM"] = f"{int(gpu.AdapterRAM / (1024**2))} MB" if hasattr(gpu, "AdapterRAM") else "Unknown"
                 
-        elif platform.system() == "Linux":
+        elif sys_platform.system() == "Linux":
             # On Linux, try lspci and glxinfo
             try:
                 lspci_output = subprocess.check_output(["lspci", "-v"], text=True)
@@ -183,11 +185,14 @@ def detect_gpu():
             except (subprocess.SubprocessError, FileNotFoundError):
                 logger.warning("Failed to get GPU info using lspci/glxinfo")
                 
-        elif platform.system() == "Darwin":  # macOS
+        elif sys_platform.system() == "Darwin":  # macOS
             try:
                 # Get Apple Silicon GPU info using specialized function
                 from tools.gather_system_info import get_apple_gpu_info
-                apple_gpus = get_apple_gpu_info()
+                logger.info("Getting Apple GPU information...")
+                apple_gpus = get_apple_gpu_info(True)  # Always skip powermetrics here
+                
+                logger.info(f"Apple GPU info results: {json.dumps(apple_gpus, indent=2)}")
                 
                 if apple_gpus and isinstance(apple_gpus[0], dict):
                     main_gpu = apple_gpus[0]
@@ -207,31 +212,36 @@ def detect_gpu():
                     for our_key, apple_key in key_mapping.items():
                         if apple_key in main_gpu and main_gpu[apple_key]:
                             gpu_info[our_key] = main_gpu[apple_key]
-                            
-                    # If we don't get GPU name, extract it from platform model
-                    if gpu_info["GPU"] == "Unknown" and "Apple" in platform.processor():
-                        try:
-                            model_output = subprocess.check_output(["sysctl", "-n", "hw.model"], text=True).strip()
-                            if model_output:
-                                if "Mac" in model_output:
-                                    gpu_info["GPU"] = f"Apple Integrated Graphics ({model_output})"
-                                else:
-                                    gpu_info["GPU"] = "Apple Integrated Graphics"
-                        except:
-                            pass
                     
-                    # Use OpenCL to get extra info if not already present
-                    if gpu_info["Cores"] == "Unknown" or gpu_info["ClockSpeed"] == "Unknown":
+                    # If GPU name is still unknown, try to get it from OpenCL
+                    if gpu_info["GPU"] == "Unknown" or not gpu_info["GPU"]:
                         try:
                             import pyopencl as cl
+                            logger.info("Getting additional GPU info from OpenCL...")
                             platforms = cl.get_platforms()
+                            
+                            # Log all available OpenCL platforms and devices
+                            for plat_idx, platform in enumerate(platforms):
+                                logger.info(f"OpenCL Platform {plat_idx}: {platform.name}")
+                                devices = platform.get_devices()
+                                for dev_idx, device in enumerate(devices):
+                                    logger.info(f"  Device {dev_idx}: {device.name}")
+                                    logger.info(f"    Compute Units: {device.max_compute_units}")
+                                    logger.info(f"    Clock Frequency: {device.max_clock_frequency} MHz")
+                                    logger.info(f"    Global Memory: {device.global_mem_size/1024/1024/1024} GB")
+                            
+                            # Now extract info for Apple device
                             for platform in platforms:
                                 if "Apple" in platform.name:
                                     for device in platform.get_devices():
+                                        gpu_info["GPU"] = device.name
+                                        gpu_info["GPUVendor"] = "Apple"
                                         if gpu_info["Cores"] == "Unknown":
                                             gpu_info["Cores"] = f"{device.max_compute_units} Compute Units"
                                         if gpu_info["ClockSpeed"] == "Unknown":
                                             gpu_info["ClockSpeed"] = f"{device.max_clock_frequency} MHz"
+                                        if gpu_info["VRAM"] == "Unknown":
+                                            gpu_info["VRAM"] = f"{int(device.global_mem_size/1024/1024/1024)} GB"
                                         break
                         except:
                             pass
@@ -418,6 +428,10 @@ def main():
     parser.add_argument("--notes", help="Additional notes about your submission", default="")
     parser.add_argument("--device", choices=["auto", "cuda", "mps", "cpu"], default="auto",
                       help="Device to run benchmarks on (auto, cuda, mps, or cpu)")
+    parser.add_argument("--skip-powermetrics", action="store_true",
+                      help="Skip collecting GPU power metrics (avoids password prompt)")
+    parser.add_argument("--skip-benchmarks", action="store_true",
+                      help="Skip running benchmarks and only collect system information")
     
     args = parser.parse_args()
     
@@ -428,7 +442,7 @@ def main():
     logger.info("Starting GPU benchmark suite")
     
     # Get system information
-    sys_info = get_system_info()
+    sys_info = get_system_info(args.skip_powermetrics)
     
     # Detect GPU
     gpu_info = detect_gpu()
@@ -437,8 +451,18 @@ def main():
     # Log system information
     logger.info(f"System: {sys_info['platform']['system']} {sys_info['platform']['release']}, {sys_info['cpu']['model']}, {sys_info['memory'].get('MemTotal', 'Unknown RAM')}")
     
-    # Run all benchmarks
-    results = run_all_benchmarks(args.device)
+    # Run all benchmarks if not skipped
+    if not args.skip_benchmarks:
+        results = run_all_benchmarks(args.device)
+    else:
+        logger.info("Skipping benchmarks as requested")
+        results = {
+            "memory": {},
+            "compute": {},
+            "graphics": {},
+            "ai": {},
+            "pcie": {}
+        }
     
     # Calculate total runtime
     end_time = time.time()
@@ -475,9 +499,30 @@ def main():
     
     # Generate output filename if not provided
     if not args.output:
+        # Double-check GPU name before using it for filename
+        gpu_name = gpu_info["GPU"]
+        
+        # Try once more to get GPU name if it's still "Unknown"
+        if gpu_name == "Unknown" or not gpu_name:
+            try:
+                import pyopencl as cl
+                platforms = cl.get_platforms()
+                for platform in platforms:
+                    if "Apple" in platform.name:
+                        devices = platform.get_devices()
+                        if devices:
+                            gpu_name = devices[0].name
+                            # Also update the GPU info
+                            gpu_info["GPU"] = gpu_name
+                            # Update the metadata
+                            metadata["system"]["gpu"]["GPU"] = gpu_name
+                            break
+            except Exception as e:
+                logger.warning(f"Failed to get GPU name from OpenCL for filename: {e}")
+        
         # Create a filename based on GPU and date
         date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-        gpu_name = gpu_info["GPU"].replace(" ", "_")
+        gpu_name = gpu_name.replace(" ", "_")
         args.output = RESULTS_SUBMISSIONS_DIR / f"{date_str}_{gpu_name}.json"
     
     # Save results
