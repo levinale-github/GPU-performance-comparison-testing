@@ -14,6 +14,8 @@ import argparse
 import logging
 import platform
 from pathlib import Path
+import torch
+import torchvision.models as models
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -24,7 +26,6 @@ sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
 # Try to import PyTorch and related libraries
 try:
-    import torch
     import torchvision
     import numpy as np
     from PIL import Image
@@ -37,28 +38,40 @@ except ImportError as e:
 
 def get_device_info():
     """Get information about the available GPU device"""
-    if not torch.cuda.is_available():
+    # Check for Apple Silicon MPS first
+    if torch.backends.mps.is_available():
+        return {
+            "device": "MPS GPU",
+            "device_name": "Apple Silicon GPU",
+            "mps_available": True,
+            "pytorch_version": torch.__version__,
+            "torchvision_version": torchvision.__version__
+        }
+    # Then check for CUDA
+    elif torch.cuda.is_available():
+        device_count = torch.cuda.device_count()
+        device_name = torch.cuda.get_device_name(0) if device_count > 0 else "Unknown"
+        cuda_version = torch.version.cuda
+        
+        return {
+            "device": "CUDA GPU",
+            "device_name": device_name,
+            "device_count": device_count,
+            "cuda_version": cuda_version,
+            "cuda_available": True,
+            "pytorch_version": torch.__version__,
+            "torchvision_version": torchvision.__version__
+        }
+    # Fall back to CPU
+    else:
         return {
             "device": "CPU",
             "device_name": platform.processor(),
             "cuda_available": False,
+            "mps_available": False,
             "pytorch_version": torch.__version__,
             "torchvision_version": torchvision.__version__
         }
-    
-    device_count = torch.cuda.device_count()
-    device_name = torch.cuda.get_device_name(0) if device_count > 0 else "Unknown"
-    cuda_version = torch.version.cuda
-    
-    return {
-        "device": "CUDA GPU",
-        "device_name": device_name,
-        "device_count": device_count,
-        "cuda_version": cuda_version,
-        "cuda_available": True,
-        "pytorch_version": torch.__version__,
-        "torchvision_version": torchvision.__version__
-    }
 
 def download_model(model_name="resnet50", pretrained=True):
     """Download a pre-trained model"""
@@ -87,60 +100,46 @@ def download_model(model_name="resnet50", pretrained=True):
         logger.error(f"Error downloading model: {e}")
         return None
 
-def prepare_input(batch_size=1, image_size=224):
-    """Prepare random input data for the model"""
-    return torch.randn(batch_size, 3, image_size, image_size)
+def prepare_input(batch_size, device):
+    """Prepare input tensor on the specified device."""
+    input_tensor = torch.randn(batch_size, 3, 224, 224)
+    if device.type == 'mps':
+        input_tensor = input_tensor.float()
+    return input_tensor.to(device)
 
-def warmup(model, input_tensor, device, num_warmup=10):
-    """Perform warmup runs to initialize the GPU"""
-    logger.info(f"Performing {num_warmup} warmup iterations...")
-    
+def load_model(device):
+    """Load and move model to the specified device."""
+    model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+    if device.type == 'mps':
+        # For MPS, we need to ensure everything is float32
+        model = model.float()
+        for param in model.parameters():
+            param.data = param.data.float()
     model = model.to(device)
     model.eval()
-    
-    # Disable gradient computation for inference
+    return model
+
+def warmup(model, input_tensor, device):
+    """Warm up the model."""
     with torch.no_grad():
-        for _ in range(num_warmup):
+        for _ in range(20):
             _ = model(input_tensor)
-    
-    # Synchronize if running on GPU
-    if device.type == "cuda":
-        torch.cuda.synchronize()
+        if device.type == 'mps':
+            torch.mps.synchronize()
 
-def benchmark_inference(model, input_tensor, device, num_runs=100):
-    """Benchmark inference performance"""
-    logger.info(f"Running benchmark with {num_runs} iterations...")
-    
-    model = model.to(device)
-    model.eval()
-    
-    # Ensure input is on the same device as model
-    input_tensor = input_tensor.to(device)
-    
-    # Disable gradient computation for inference
+def benchmark_inference(model, input_tensor, num_iterations=100):
+    """Benchmark inference performance."""
     with torch.no_grad():
-        # Start timing
         start_time = time.time()
-        
-        for _ in range(num_runs):
+        for _ in range(num_iterations):
             _ = model(input_tensor)
-            
-            # Synchronize if running on GPU
-            if device.type == "cuda":
-                torch.cuda.synchronize()
-        
+        if input_tensor.device.type == 'mps':
+            torch.mps.synchronize()
         end_time = time.time()
-    
-    # Calculate performance metrics
-    elapsed_time = end_time - start_time
-    time_per_inference = elapsed_time / num_runs * 1000  # in milliseconds
-    inferences_per_second = num_runs / elapsed_time
-    
-    return {
-        "total_time": elapsed_time,
-        "time_per_inference": time_per_inference,
-        "inferences_per_second": inferences_per_second
-    }
+        
+        elapsed_time = end_time - start_time
+        images_per_second = (num_iterations * input_tensor.size(0)) / elapsed_time
+        return images_per_second
 
 def benchmark_batch_sizes(model, device, sizes=[1, 4, 8, 16, 32, 64]):
     """Benchmark performance with different batch sizes"""
@@ -167,17 +166,17 @@ def benchmark_batch_sizes(model, device, sizes=[1, 4, 8, 16, 32, 64]):
                     pass
                 
             logger.info(f"Testing batch size: {batch_size}")
-            input_tensor = prepare_input(batch_size=batch_size)
+            input_tensor = prepare_input(batch_size, device)
             
             # Shorter warmup and fewer runs for larger batches
             warmup_count = max(5, 20 // batch_size)
             run_count = max(10, 100 // batch_size)
             
-            warmup(model, input_tensor, device, num_warmup=warmup_count)
-            result = benchmark_inference(model, input_tensor, device, num_runs=run_count)
+            warmup(model, input_tensor, device)
+            result = benchmark_inference(model, input_tensor)
             
             # Calculate images per second (batch_size * inferences_per_second)
-            result["images_per_second"] = batch_size * result["inferences_per_second"]
+            result["images_per_second"] = batch_size * result
             
             # Add to results dictionary
             results[f"batch_{batch_size}"] = result
@@ -224,7 +223,7 @@ def main():
                         help="Fixed batch size for simple benchmarks")
     parser.add_argument("--json", action="store_true",
                         help="Output results as JSON")
-    parser.add_argument("--device", choices=["auto", "cuda", "cpu"], default="auto",
+    parser.add_argument("--device", choices=["auto", "cuda", "mps", "cpu"], default="auto",
                         help="Device to run benchmark on")
     args = parser.parse_args()
     
@@ -233,7 +232,12 @@ def main():
     
     # Set device based on args and availability
     if args.device == "auto":
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.backends.mps.is_available():
+            device = torch.device("mps")
+        elif torch.cuda.is_available():
+            device = torch.device("cuda")
+        else:
+            device = torch.device("cpu")
     else:
         device = torch.device(args.device)
     
@@ -246,6 +250,8 @@ def main():
     
     if device.type == "cuda":
         logger.info(f"CUDA version: {device_info.get('cuda_version', 'Unknown')}")
+    elif device.type == "mps":
+        logger.info("Using Apple Metal Performance Shaders (MPS)")
     
     logger.info(f"PyTorch version: {device_info.get('pytorch_version', 'Unknown')}")
     
@@ -268,13 +274,13 @@ def main():
             if model is None:
                 raise ValueError(f"Failed to load {model_name}")
             
-            input_tensor = prepare_input(batch_size=args.batch_size)
+            input_tensor = prepare_input(args.batch_size, device)
             warmup(model, input_tensor, device)
             
             logger.info(f"Benchmarking {model_name} with batch size {args.batch_size}...")
-            inference_result = benchmark_inference(model, input_tensor, device)
+            inference_result = benchmark_inference(model, input_tensor)
             
-            inference_result["images_per_second"] = args.batch_size * inference_result["inferences_per_second"]
+            inference_result["images_per_second"] = args.batch_size * inference_result
             results[model_name] = {f"batch_{args.batch_size}": inference_result}
             
         else:
