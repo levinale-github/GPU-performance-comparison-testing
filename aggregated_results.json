@@ -1,0 +1,136 @@
+{
+  "last_updated": "2025-04-13T00:13:07.684290",
+  "gpus": [
+    {
+      "name": "Apple M4 Max",
+      "vendor": "Apple (0x106b)",
+      "timestamp": "2025-04-10T22:09:45.601057",
+      "system": {
+        "cpu": {
+          "model": "Apple M4 Max"
+        },
+        "memory": {
+          "total": "64 GB"
+        },
+        "os": "Darwin 24.3.0"
+      },
+      "benchmarks": {
+        "memory": {
+          "TransferPCIe": 56.30625659344989,
+          "TransferPCIeUnit": "GB/s",
+          "TransferH2D": 54.53620280177399,
+          "TransferH2DUnit": "GB/s",
+          "TransferD2H": 56.30625659344989,
+          "TransferD2HUnit": "GB/s",
+          "PCIeGeneration": "PCIe 4.0 x16 or better",
+          "DetailedResults": {
+            "16": {
+              "h2d_bandwidth": 25.257984270518307,
+              "d2h_bandwidth": 26.375091520863567
+            },
+            "64": {
+              "h2d_bandwidth": 49.5292938079634,
+              "d2h_bandwidth": 56.30625659344989
+            },
+            "256": {
+              "h2d_bandwidth": 54.53620280177399,
+              "d2h_bandwidth": 53.0084701903307
+            },
+            "1024": {
+              "h2d_bandwidth": 41.172756528624156,
+              "d2h_bandwidth": 43.8618154734799
+            }
+          },
+          "DeviceInfo": {
+            "backend": "OpenCL",
+            "device": "Apple M4 Max",
+            "pcie_version": "PCIe 3.0 (estimated)",
+            "platform": "Darwin",
+            "platform_name": "Apple"
+          }
+        },
+        "compute": {},
+        "graphics": {
+          "raw_output": "pygame 2.6.1 (SDL 2.28.4, Python 3.13.2)\nHello from the pygame community. https://www.pygame.org/contribute.html\n\n{\"SimpleOpenGLScore\": 304, \"TestDetails\": {\"Triangles_100\": 2220.3808014473643, \"Triangles_1000\": 339.44149477030055, \"Triangles_10000\": 37.23749708290634, \"Triangles_50000\": 7.696851543330303}, \"DeviceInfo\": {\"Vendor\": \"Apple\", \"Renderer\": \"Apple M4 Max\", \"OpenGLVersion\": \"2.1 Metal - 89.3\"}, \"GLMark2Score\": 304, \"GLMark2Note\": \"Estimated from OpenGL test (not actual glmark2)\"}"
+        },
+        "ai": {
+          "ResNet50Inference": 65,
+          "ResNet50InferenceUnit": "images/sec",
+          "OptimalBatchSize": 8,
+          "OptimalModel": "resnet50",
+          "DetailedResults": {
+            "resnet50": {
+              "batch_1": {
+                "total_time": 2.0019772052764893,
+                "time_per_inference": 20.019772052764893,
+                "inferences_per_second": 49.95061868658449,
+                "images_per_second": 49.95061868658449
+              },
+              "batch_4": {
+                "total_time": 1.883835792541504,
+                "time_per_inference": 75.35343170166016,
+                "inferences_per_second": 13.270795734416014,
+                "images_per_second": 53.083182937664056
+              },
+              "batch_8": {
+                "total_time": 1.4733490943908691,
+                "time_per_inference": 122.77909119923909,
+                "inferences_per_second": 8.144709251653081,
+                "images_per_second": 65.15767401322465
+              },
+              "batch_16": {
+                "total_time": 17.5606210231781,
+                "time_per_inference": 1756.06210231781,
+                "inferences_per_second": 0.5694559427483283,
+                "images_per_second": 9.111295083973253
+              }
+            }
+          },
+          "DeviceInfo": {
+            "device": "CPU",
+            "device_name": "arm",
+            "cuda_available": false,
+            "pytorch_version": "2.6.0",
+            "torchvision_version": "0.21.0"
+          }
+        },
+        "pcie": {
+          "TransferPCIe": 60.40235551730815,
+          "TransferPCIeUnit": "GB/s",
+          "TransferH2D": 46.838335420693234,
+          "TransferH2DUnit": "GB/s",
+          "TransferD2H": 60.40235551730815,
+          "TransferD2HUnit": "GB/s",
+          "PCIeGeneration": "PCIe 4.0 x16 or better",
+          "DetailedResults": {
+            "16": {
+              "h2d_bandwidth": 23.33955030768292,
+              "d2h_bandwidth": 23.597835069639167
+            },
+            "64": {
+              "h2d_bandwidth": 45.95509823847445,
+              "d2h_bandwidth": 60.40235551730815
+            },
+            "256": {
+              "h2d_bandwidth": 46.838335420693234,
+              "d2h_bandwidth": 49.58164113275603
+            },
+            "1024": {
+              "h2d_bandwidth": 41.1066149505791,
+              "d2h_bandwidth": 41.76690093733941
+            }
+          },
+          "DeviceInfo": {
+            "backend": "OpenCL",
+            "device": "Apple M4 Max",
+            "pcie_version": "PCIe 3.0 (estimated)",
+            "platform": "Darwin",
+            "platform_name": "Apple"
+          }
+        }
+      },
+      "contributor": "MacBook Pro User",
+      "notes": "MacBook Pro with Apple Silicon M4 Max"
+    }
+  ]
+}
