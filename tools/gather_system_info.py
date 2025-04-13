@@ -17,14 +17,22 @@ from pathlib import Path
 import platform
 import psutil
 import pynvml  # For NVIDIA GPUs
-import pyamdgpuinfo  # For AMD GPUs
 import pyopencl as cl  # For OpenCL devices
+from datetime import datetime
 
 def get_cpu_info():
-    """Get CPU information from /proc/cpuinfo"""
+    """Get CPU information"""
     cpu_info = {}
     try:
-        if os.path.exists('/proc/cpuinfo'):
+        if platform.system() == 'Darwin':  # macOS
+            result = subprocess.run(['sysctl', '-n', 'machdep.cpu.brand_string'], capture_output=True, text=True)
+            if result.returncode == 0:
+                cpu_info['model'] = result.stdout.strip()
+            
+            result = subprocess.run(['sysctl', '-n', 'hw.ncpu'], capture_output=True, text=True)
+            if result.returncode == 0:
+                cpu_info['processor_count'] = int(result.stdout.strip())
+        elif os.path.exists('/proc/cpuinfo'):
             with open('/proc/cpuinfo', 'r') as f:
                 content = f.read()
                 
@@ -48,10 +56,14 @@ def get_cpu_info():
     return cpu_info
 
 def get_memory_info():
-    """Get memory information from /proc/meminfo"""
+    """Get memory information"""
     memory_info = {}
     try:
-        if os.path.exists('/proc/meminfo'):
+        if platform.system() == 'Darwin':  # macOS
+            result = subprocess.run(['sysctl', '-n', 'hw.memsize'], capture_output=True, text=True)
+            if result.returncode == 0:
+                memory_info['MemTotal'] = f"{int(result.stdout.strip()) // 1024} kB"
+        elif os.path.exists('/proc/meminfo'):
             with open('/proc/meminfo', 'r') as f:
                 for line in f:
                     if ':' in line:
@@ -63,88 +75,28 @@ def get_memory_info():
     
     return memory_info
 
-def get_pcie_info():
-    """Get PCIe device information"""
-    pcie_info = []
+def get_apple_gpu_info():
+    """Get Apple Silicon GPU information"""
+    apple_info = []
     try:
-        # Use lspci to get PCIe device information
-        result = subprocess.run(['lspci', '-v'], capture_output=True, text=True)
-        if result.returncode == 0:
-            devices = result.stdout.split('\n\n')
-            for device in devices:
-                if 'VGA' in device or '3D' in device:
-                    device_info = {}
-                    lines = device.split('\n')
-                    device_info['pci_id'] = lines[0].split()[0]
-                    device_info['description'] = ' '.join(lines[0].split()[1:])
-                    
-                    # Extract additional information
-                    for line in lines[1:]:
-                        if ':' in line:
-                            key, value = line.split(':', 1)
-                            device_info[key.strip()] = value.strip()
-                    
-                    pcie_info.append(device_info)
+        if platform.system() == 'Darwin' and platform.machine() == 'arm64':
+            # Get GPU info from system profiler
+            result = subprocess.run(['system_profiler', 'SPDisplaysDataType'], capture_output=True, text=True)
+            if result.returncode == 0:
+                gpu_info = {}
+                for line in result.stdout.split('\n'):
+                    if 'Chipset Model:' in line:
+                        gpu_info['name'] = line.split(':', 1)[1].strip()
+                    elif 'VRAM (Total):' in line:
+                        gpu_info['memory_total'] = line.split(':', 1)[1].strip()
+                
+                if gpu_info:
+                    apple_info.append(gpu_info)
     except Exception as e:
-        print(f"Error getting PCIe info: {e}")
-        pcie_info.append({'error': str(e)})
+        print(f"Error getting Apple GPU info: {e}")
+        apple_info.append({'error': str(e)})
     
-    return pcie_info
-
-def get_nvidia_gpu_info():
-    """Get detailed NVIDIA GPU information"""
-    nvidia_info = []
-    try:
-        pynvml.nvmlInit()
-        device_count = pynvml.nvmlDeviceGetCount()
-        
-        for i in range(device_count):
-            handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-            device_info = {
-                'name': pynvml.nvmlDeviceGetName(handle).decode('utf-8'),
-                'uuid': pynvml.nvmlDeviceGetUUID(handle).decode('utf-8'),
-                'memory_total': info.total,
-                'memory_free': info.free,
-                'memory_used': info.used,
-                'temperature': pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU),
-                'power_usage': pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0,  # Convert to watts
-                'pcie_gen': pynvml.nvmlDeviceGetCurrPcieLinkGeneration(handle),
-                'pcie_width': pynvml.nvmlDeviceGetCurrPcieLinkWidth(handle)
-            }
-            nvidia_info.append(device_info)
-    except Exception as e:
-        print(f"Error getting NVIDIA GPU info: {e}")
-        nvidia_info.append({'error': str(e)})
-    finally:
-        try:
-            pynvml.nvmlShutdown()
-        except:
-            pass
-    
-    return nvidia_info
-
-def get_amd_gpu_info():
-    """Get detailed AMD GPU information"""
-    amd_info = []
-    try:
-        for i in range(pyamdgpuinfo.detect_gpus()):
-            gpu = pyamdgpuinfo.get_gpu(i)
-            device_info = {
-                'name': gpu.name,
-                'memory_total': gpu.memory_info['vram_size'],
-                'memory_used': gpu.memory_info['vram_used'],
-                'temperature': gpu.query_temperature(),
-                'power_usage': gpu.query_power(),
-                'pcie_gen': gpu.query_pcie_gen(),
-                'pcie_width': gpu.query_pcie_width()
-            }
-            amd_info.append(device_info)
-    except Exception as e:
-        print(f"Error getting AMD GPU info: {e}")
-        amd_info.append({'error': str(e)})
-    
-    return amd_info
+    return apple_info
 
 def get_opencl_info():
     """Get OpenCL device information"""
@@ -188,11 +140,9 @@ def get_system_info():
         },
         'cpu': get_cpu_info(),
         'memory': get_memory_info(),
-        'pcie_devices': get_pcie_info(),
-        'nvidia_gpus': get_nvidia_gpu_info(),
-        'amd_gpus': get_amd_gpu_info(),
+        'apple_gpus': get_apple_gpu_info(),
         'opencl_devices': get_opencl_info(),
-        'timestamp': platform.datetime.datetime.now().isoformat()
+        'timestamp': datetime.now().isoformat()
     }
     
     return system_info

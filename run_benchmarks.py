@@ -128,7 +128,7 @@ def detect_gpu():
     
     return gpu_info
 
-def run_benchmark_script(script_path):
+def run_benchmark_script(script_path, device=None):
     """
     Runs an individual benchmark script and returns its results.
     """
@@ -138,43 +138,78 @@ def run_benchmark_script(script_path):
         # Determine if script is Python or shell
         script_path_str = str(script_path)
         if script_path_str.endswith('.py'):
+            cmd = [sys.executable, script_path_str]  # Convert Path to string
+            
+            # Always add --json flag for Python scripts
+            cmd.append("--json")
+            
+            # Only add device argument for AI benchmarks that support it
+            if device and "ai" in str(script_path):
+                cmd.extend(["--device", device])
+                
+            # Add specific arguments for PCIe bandwidth benchmark
+            if script_path.name == "pcie_bandwidth.py":
+                cmd.extend([
+                    "--sizes", "16,64,256,1024",  # Test with different transfer sizes
+                    "--iterations", "5"           # Number of iterations per size
+                ])
+                
+            logger.info(f"Running command: {' '.join(cmd)}")
             result = subprocess.run(
-                [sys.executable, script_path],
+                cmd,
                 capture_output=True,
                 text=True,
-                check=True
+                check=False  # Don't raise exception on non-zero exit
             )
+            
+            # Log any stderr output
+            if result.stderr:
+                logger.warning(f"Stderr output: {result.stderr}")
+            
+            # Check return code
+            if result.returncode != 0:
+                return {
+                    "error": f"Benchmark failed with exit code {result.returncode}",
+                    "stdout": result.stdout,
+                    "stderr": result.stderr
+                }
+                
         else:
             # Make sure the script is executable
             os.chmod(script_path, 0o755)
             result = subprocess.run(
-                [script_path],
+                [script_path_str],  # Convert Path to string
                 capture_output=True,
                 text=True,
-                check=True
+                check=False
             )
             
         logger.info(f"Benchmark completed: {script_path}")
         
         # Try to parse JSON output if available
         try:
-            return json.loads(result.stdout)
-        except json.JSONDecodeError:
+            # Try to find JSON in the output
+            output = result.stdout.strip()
+            # Look for the last occurrence of a JSON-like structure
+            json_start = output.rfind("{")
+            json_end = output.rfind("}")
+            if json_start >= 0 and json_end > json_start:
+                json_str = output[json_start:json_end + 1]
+                return json.loads(json_str)
+            else:
+                logger.warning(f"No JSON found in output: {output}")
+                return {"error": "No JSON found in output", "raw_output": output}
+        except json.JSONDecodeError as e:
             logger.warning(f"Could not parse JSON from benchmark output: {script_path}")
-            return {"raw_output": result.stdout.strip()}
+            logger.warning(f"JSON error: {e}")
+            logger.warning(f"Raw output: {result.stdout}")
+            return {"error": f"Failed to parse JSON output: {str(e)}", "raw_output": result.stdout.strip()}
             
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Benchmark failed: {script_path}")
-        logger.error(f"Exit code: {e.returncode}")
-        logger.error(f"Stdout: {e.stdout}")
-        logger.error(f"Stderr: {e.stderr}")
-        return {"error": f"Benchmark failed with exit code {e.returncode}"}
-        
     except Exception as e:
         logger.error(f"Error running benchmark {script_path}: {str(e)}")
         return {"error": str(e)}
 
-def run_all_benchmarks():
+def run_all_benchmarks(device=None):
     """
     Runs all benchmarks in the benchmark directory.
     Returns a dictionary with results from all benchmarks.
@@ -198,6 +233,15 @@ def run_all_benchmarks():
     
     # Find all benchmark scripts
     benchmark_scripts = []
+    processed_scripts = set()  # Keep track of processed scripts to avoid duplicates
+    
+    # First, add the PCIe bandwidth benchmark if it exists
+    pcie_bandwidth_script = BENCHMARK_DIR / "memory" / "pcie_bandwidth.py"
+    if pcie_bandwidth_script.exists() and os.access(pcie_bandwidth_script, os.X_OK):
+        benchmark_scripts.append(("pcie", pcie_bandwidth_script))
+        processed_scripts.add(pcie_bandwidth_script)
+    
+    # Then process other benchmarks
     for category in category_mapping:
         category_dir = BENCHMARK_DIR / category
         if category_dir.exists():
@@ -205,18 +249,14 @@ def run_all_benchmarks():
                 if (file.is_file() and 
                     (file.name.endswith(".py") or file.name.endswith(".sh")) and
                     not file.name.startswith("_") and
-                    os.access(file, os.X_OK)):
+                    os.access(file, os.X_OK) and
+                    file not in processed_scripts):  # Skip if already processed
                     benchmark_scripts.append((category, file))
-    
-    # Special case for PCIe bandwidth benchmark
-    # Include it even if the pcie directory doesn't exist yet
-    pcie_bandwidth_script = BENCHMARK_DIR / "memory" / "pcie_bandwidth.py"
-    if pcie_bandwidth_script.exists() and os.access(pcie_bandwidth_script, os.X_OK):
-        benchmark_scripts.append(("pcie", pcie_bandwidth_script))
+                    processed_scripts.add(file)
     
     # Run each benchmark
     for category, script in benchmark_scripts:
-        result = run_benchmark_script(script)
+        result = run_benchmark_script(script, device)
         
         # Add result to appropriate category
         result_category = category_mapping.get(category, "other")
@@ -239,6 +279,8 @@ def main():
     parser.add_argument("--cloud-equivalent", help="Cloud instance equivalent", default=None)
     parser.add_argument("--cloud-cost", type=float, help="Hourly cost of cloud instance in USD", default=None)
     parser.add_argument("--notes", help="Additional notes about your submission", default="")
+    parser.add_argument("--device", choices=["auto", "cuda", "mps", "cpu"], default="auto",
+                      help="Device to run benchmarks on (auto, cuda, mps, or cpu)")
     
     args = parser.parse_args()
     
@@ -248,93 +290,75 @@ def main():
     # Log start of benchmark run
     logger.info("Starting GPU benchmark suite")
     
-    # Get GPU and system info
-    gpu_info = detect_gpu()
+    # Get system information
     sys_info = get_system_info()
     
+    # Detect GPU
+    gpu_info = detect_gpu()
     logger.info(f"Detected GPU: {gpu_info['GPU']}")
-    logger.info(f"System: {sys_info['OS']}, {sys_info['CPUModel']}, {sys_info['RAMSize']}")
+    
+    # Log system information
+    logger.info(f"System: {sys_info['platform']['system']} {sys_info['platform']['release']}, {sys_info['cpu']['model']}, {sys_info['memory'].get('MemTotal', 'Unknown RAM')}")
     
     # Run all benchmarks
-    benchmark_results = run_all_benchmarks()
+    results = run_all_benchmarks(args.device)
     
-    # Calculate elapsed time
-    elapsed_time = time.time() - start_time
-    logger.info(f"All benchmarks completed in {elapsed_time:.2f} seconds")
+    # Calculate total runtime
+    end_time = time.time()
+    total_runtime = end_time - start_time
     
-    # Prepare results object
-    timestamp = datetime.datetime.now().isoformat()
-    
-    results = {
-        "metadata": {
-            **gpu_info,
-            **sys_info,
-            "Contributor": args.contributor,
-            "Notes": args.notes,
-            "Timestamp": timestamp
+    # Prepare metadata
+    metadata = {
+        "system": {
+            "os": f"{sys_info['platform']['system']} {sys_info['platform']['release']}",
+            "cpu": sys_info['cpu'],
+            "memory": sys_info['memory'],
+            "gpu": gpu_info
         },
-        "results": benchmark_results
+        "contributor": args.contributor,
+        "timestamp": datetime.datetime.now().isoformat(),
+        "runtime": total_runtime,
+        "notes": args.notes
     }
     
     # Add cost information if provided
-    if any([args.retail_price, args.purchase_date, args.cloud_equivalent, args.cloud_cost]):
-        results["metadata"]["Cost"] = {}
-        
-        if args.retail_price:
-            results["metadata"]["Cost"]["RetailPrice"] = args.retail_price
-            results["metadata"]["Cost"]["Currency"] = "USD"
-            
-        if args.purchase_date:
-            results["metadata"]["Cost"]["PurchaseDate"] = args.purchase_date
-            
-        if args.cloud_equivalent:
-            results["metadata"]["Cost"]["CloudEquivalent"] = args.cloud_equivalent
-            
-        if args.cloud_cost:
-            results["metadata"]["Cost"]["CloudCostPerHour"] = args.cloud_cost
+    if args.retail_price or args.cloud_cost:
+        metadata["cost"] = {
+            "retail_price_usd": args.retail_price,
+            "purchase_date": args.purchase_date,
+            "cloud_equivalent": args.cloud_equivalent,
+            "cloud_cost_per_hour": args.cloud_cost
+        }
+    
+    # Combine results and metadata
+    final_results = {
+        "metadata": metadata,
+        "results": results
+    }
     
     # Generate output filename if not provided
     if not args.output:
-        # Clean the GPU name to use in filename
-        gpu_name_safe = gpu_info["GPU"].replace(" ", "_").replace("/", "_")
-        gpu_name_safe = ''.join(c for c in gpu_name_safe if c.isalnum() or c in '-_')
-        
+        # Create a filename based on GPU and date
         date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-        output_filename = f"{date_str}_{gpu_info['GPUVendor']}_{gpu_name_safe}.json"
-        output_path = RESULTS_SUBMISSIONS_DIR / output_filename
-    else:
-        output_path = Path(args.output)
+        gpu_name = gpu_info["GPU"].replace(" ", "_")
+        args.output = RESULTS_SUBMISSIONS_DIR / f"{date_str}_{gpu_name}.json"
     
-    # Write results to file
-    with open(output_path, "w") as f:
-        json.dump(results, f, indent=2)
+    # Save results
+    output_path = Path(args.output)
+    with open(output_path, 'w') as f:
+        json.dump(final_results, f, indent=2)
     
-    logger.info(f"Results written to {output_path}")
+    logger.info(f"Results saved to: {output_path}")
     
-    # Copy log file to logs directory
+    # Copy log file to results/logs with matching name
     log_filename = output_path.stem + ".log"
-    log_dest_path = RESULTS_LOGS_DIR / log_filename
-    
-    # Wait a moment to ensure all logs are flushed
-    time.sleep(0.5)
-    
-    try:
+    log_path = RESULTS_LOGS_DIR / log_filename
+    if os.path.exists("benchmark_run.log"):
         import shutil
-        shutil.copy("benchmark_run.log", log_dest_path)
-        logger.info(f"Log copied to {log_dest_path}")
-    except Exception as e:
-        logger.error(f"Failed to copy log file: {e}")
+        shutil.copy2("benchmark_run.log", log_path)
+        logger.info(f"Log file copied to: {log_path}")
     
-    print("\nBenchmark run completed!")
-    print(f"Results saved to: {output_path}")
-    print(f"Log saved to: {log_dest_path}")
-    
-    print("\nTo contribute these results to the repository:")
-    print("1. Fork the repository on GitHub")
-    print("2. Add your results file to the 'results/submissions/' directory")
-    print("3. Add your log file to the 'results/logs/' directory")
-    print("4. Create a pull request")
-    print("See CONTRIBUTING.md for detailed instructions.")
+    return 0
 
 if __name__ == "__main__":
     main() 

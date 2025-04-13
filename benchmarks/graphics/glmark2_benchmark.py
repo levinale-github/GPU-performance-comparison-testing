@@ -323,119 +323,66 @@ def run_fallback_benchmark():
         return None
 
 def main():
+    """Main function to run the graphics benchmark"""
     parser = argparse.ArgumentParser(description="GPU Graphics Performance Benchmark")
-    parser.add_argument("--json", action="store_true",
-                        help="Output results as JSON")
+    parser.add_argument("--json", action="store_true", help="Output results in JSON format")
     args = parser.parse_args()
     
-    logger.info("GPU Graphics Performance Benchmark")
-    logger.info("=" * 40)
-    
-    # Gather basic system info
-    system = platform.system()
-    logger.info(f"Running on {system} {platform.release()}")
-    
-    # Check if glmark2 is available on Linux
-    has_glmark2 = False
-    if system == "Linux":
-        has_glmark2 = detect_glmark2()
-        if not has_glmark2:
-            logger.warning("glmark2 not found on your system.")
-            logger.warning(install_glmark2_instructions())
-    
-    # Determine which benchmark to run
-    graphics_results = None
-    graphics_info = {}
-    
-    # Try to get graphics info regardless of which benchmark we'll run
-    graphics_libs = try_import_graphics_libraries()
-    if graphics_libs.get("opengl", False) and graphics_libs.get("pygame", False):
+    try:
+        # Get graphics info
         graphics_info = get_graphics_info()
-        logger.info(f"Detected graphics device: {graphics_info.get('Renderer', 'Unknown')}")
-        logger.info(f"OpenGL version: {graphics_info.get('OpenGLVersion', 'Unknown')}")
-    
-    # Run the appropriate benchmark
-    if system == "Linux" and has_glmark2:
-        logger.info("Running glmark2 benchmark...")
-        graphics_results = run_glmark2_benchmark()
         
-        if graphics_results:
-            logger.info(f"glmark2 score: {graphics_results['GLMark2Score']}")
+        # Initialize results
+        results = {
+            "error": None,
+            "graphics_info": graphics_info
+        }
+        
+        # Check if glmark2 is available on Linux
+        if platform.system() == "Linux" and detect_glmark2():
+            benchmark_results = run_glmark2_benchmark()
+            if benchmark_results:
+                results.update(benchmark_results)
+            else:
+                results["error"] = "glmark2 benchmark failed"
         else:
-            logger.warning("glmark2 benchmark failed. Trying OpenGL benchmark...")
-            if graphics_libs.get("opengl", False) and graphics_libs.get("pygame", False):
-                graphics_results = run_opengl_simple_benchmark()
-    
-    elif graphics_libs.get("opengl", False) and graphics_libs.get("pygame", False):
-        logger.info("Running OpenGL benchmark...")
-        graphics_results = run_opengl_simple_benchmark()
+            # Run OpenGL benchmark on other platforms
+            available_libs = try_import_graphics_libraries()
+            if available_libs.get("opengl") and available_libs.get("pygame"):
+                benchmark_results = run_opengl_simple_benchmark()
+                if benchmark_results:
+                    results.update(benchmark_results)
+                else:
+                    results["error"] = "OpenGL benchmark failed"
+            else:
+                results["error"] = "Required libraries not available"
+                results["missing_libraries"] = [
+                    lib for lib, available in available_libs.items() 
+                    if not available
+                ]
         
-        if graphics_results:
-            logger.info(f"OpenGL benchmark score: {graphics_results.get('SimpleOpenGLScore', 0)}")
+        # Output results
+        if args.json:
+            print(json.dumps(results))
         else:
-            logger.warning("OpenGL benchmark failed.")
-    
-    # If all previous benchmarks failed or weren't applicable, try very simple 2D benchmark
-    if not graphics_results and graphics_libs.get("pillow", False) and graphics_libs.get("numpy", False):
-        logger.info("Running simple 2D graphics benchmark...")
-        graphics_results = run_fallback_benchmark()
+            logger.info("\nGraphics Benchmark Results:")
+            for key, value in results.items():
+                logger.info(f"{key}: {value}")
         
-        if graphics_results:
-            logger.info(f"2D Graphics score: {graphics_results.get('Simple2DGraphicsScore', 0)}")
-    
-    # If we couldn't run any benchmark
-    if not graphics_results:
-        logger.error("All graphics benchmarks failed.")
-        logger.error("Please install the required dependencies:")
-        logger.error("  pip install pygame numpy pillow PyOpenGL")
-        if system == "Linux":
-            logger.error("  - or - install glmark2 via your package manager")
+        return 0 if not results.get("error") else 1
         
+    except Exception as e:
         error_results = {
-            "error": "All graphics benchmarks failed. Please install required dependencies."
+            "error": f"Benchmark error: {str(e)}",
+            "graphics_info": graphics_info if 'graphics_info' in locals() else {}
         }
         
         if args.json:
-            print(json.dumps(error_results, indent=2))
+            print(json.dumps(error_results))
         else:
-            print("\n" + json.dumps(error_results))
+            logger.error(f"Error during benchmark: {e}")
         
         return 1
-    
-    # Add graphics info to results
-    if graphics_info:
-        graphics_results["DeviceInfo"] = graphics_info
-    
-    # Normalize output - ensure we have a primary score called "GLMark2Score"
-    # even if we ran a different benchmark
-    if "GLMark2Score" not in graphics_results and "SimpleOpenGLScore" in graphics_results:
-        graphics_results["GLMark2Score"] = graphics_results["SimpleOpenGLScore"]
-        graphics_results["GLMark2Note"] = "Estimated from OpenGL test (not actual glmark2)"
-    
-    if "GLMark2Score" not in graphics_results and "Simple2DGraphicsScore" in graphics_results:
-        graphics_results["GLMark2Score"] = graphics_results["Simple2DGraphicsScore"] // 2
-        graphics_results["GLMark2Note"] = "Rough approximation from 2D test (not actual glmark2)"
-    
-    # Output results
-    if args.json:
-        # Only print the JSON result
-        print(json.dumps(graphics_results, indent=2))
-    else:
-        # Print detailed results to console
-        logger.info("\nSummary:")
-        if "DeviceInfo" in graphics_results:
-            logger.info(f"Device: {graphics_results['DeviceInfo'].get('Renderer', 'Unknown')}")
-            logger.info(f"OpenGL: {graphics_results['DeviceInfo'].get('OpenGLVersion', 'Unknown')}")
-        
-        if "GLMark2Score" in graphics_results:
-            logger.info(f"Graphics Score: {graphics_results['GLMark2Score']}")
-            if "GLMark2Note" in graphics_results:
-                logger.info(f"Note: {graphics_results['GLMark2Note']}")
-        
-        # Print JSON at the end for the runner to parse
-        print("\n" + json.dumps(graphics_results))
-    
-    return 0
 
 if __name__ == "__main__":
     sys.exit(main()) 
