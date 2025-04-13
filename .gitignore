@@ -64,4 +64,11 @@ custom_benchmarks/
 .Spotlight-V100
 .Trashes
 ehthumbs.db
-Thumbs.db 
+Thumbs.db
+
+# Aggregated results files (generated)
+/results/aggregated_results.json
+/dashboard/aggregated_results.json
+
+# Temporary files
+a 
