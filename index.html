@@ -29,7 +29,7 @@
         
         /* Custom popover styles */
         .popover {
-            max-width: 350px;
+            max-width: 400px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
         
@@ -40,7 +40,7 @@
         }
         
         .popover-body {
-            max-height: 350px;
+            max-height: 500px;
             overflow-y: auto;
             padding: 12px;
         }
@@ -165,8 +165,8 @@
         // Fetch and process data
         async function fetchData() {
             try {
-                // Path for GitHub Pages deployment
-                const response = await fetch('./aggregated_results.json');
+                // Path for GitHub Pages deployment with cache busting
+                const response = await fetch(`./aggregated_results.json?t=${new Date().getTime()}`);
                 const data = await response.json();
                 
                 // Update last updated timestamp
@@ -435,8 +435,8 @@
                     infoBtn.textContent = '?';
                     infoBtn.dataset.bsToggle = 'popover';
                     infoBtn.dataset.bsHtml = 'true';
-                    infoBtn.dataset.bsPlacement = 'top';
-                    infoBtn.dataset.bsTrigger = 'hover focus';
+                    infoBtn.dataset.bsPlacement = 'right';
+                    infoBtn.dataset.bsTrigger = 'click';
                     infoBtn.title = 'System Information';
                     
                     // Generate popover content HTML
@@ -474,12 +474,33 @@
                             popoverContent += `<div class="metadata-item"><strong>Vendor:</strong> ${gpu.systemMetadata.gpu.GPUVendor}</div>`;
                         }
                         
+                        if (gpu.systemMetadata.gpu.VRAM && gpu.systemMetadata.gpu.VRAM !== 'Unknown') {
+                            popoverContent += `<div class="metadata-item"><strong>VRAM:</strong> ${gpu.systemMetadata.gpu.VRAM}</div>`;
+                        }
+                        
                         if (gpu.systemMetadata.gpu.Driver && gpu.systemMetadata.gpu.Driver !== 'Unknown') {
                             popoverContent += `<div class="metadata-item"><strong>Driver:</strong> ${gpu.systemMetadata.gpu.Driver}</div>`;
                         }
                         
-                        if (gpu.systemMetadata.gpu.VRAM && gpu.systemMetadata.gpu.VRAM !== 'Unknown') {
-                            popoverContent += `<div class="metadata-item"><strong>VRAM:</strong> ${gpu.systemMetadata.gpu.VRAM}</div>`;
+                        // Add the enhanced GPU information
+                        if (gpu.systemMetadata.gpu.Cores && gpu.systemMetadata.gpu.Cores !== 'Unknown') {
+                            popoverContent += `<div class="metadata-item"><strong>Cores:</strong> ${gpu.systemMetadata.gpu.Cores}</div>`;
+                        }
+                        
+                        if (gpu.systemMetadata.gpu.ClockSpeed && gpu.systemMetadata.gpu.ClockSpeed !== 'Unknown') {
+                            popoverContent += `<div class="metadata-item"><strong>Clock Speed:</strong> ${gpu.systemMetadata.gpu.ClockSpeed}</div>`;
+                        }
+                        
+                        if (gpu.systemMetadata.gpu.Architecture && gpu.systemMetadata.gpu.Architecture !== 'Unknown') {
+                            popoverContent += `<div class="metadata-item"><strong>Architecture:</strong> ${gpu.systemMetadata.gpu.Architecture}</div>`;
+                        }
+                        
+                        if (gpu.systemMetadata.gpu.PCIeBandwidth && gpu.systemMetadata.gpu.PCIeBandwidth !== 'Unknown') {
+                            popoverContent += `<div class="metadata-item"><strong>PCIe:</strong> ${gpu.systemMetadata.gpu.PCIeBandwidth}</div>`;
+                        }
+                        
+                        if (gpu.systemMetadata.gpu.PowerUsage && gpu.systemMetadata.gpu.PowerUsage !== 'Unknown') {
+                            popoverContent += `<div class="metadata-item"><strong>Power Usage:</strong> ${gpu.systemMetadata.gpu.PowerUsage}</div>`;
                         }
                     }
                     
