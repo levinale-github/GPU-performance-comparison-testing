@@ -9,6 +9,64 @@
     <style>
         .card { margin-bottom: 20px; }
         .chart-container { position: relative; height: 300px; width: 100%; }
+        
+        /* Info icon styles */
+        .info-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            background-color: #6c757d;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: help;
+            margin-left: 5px;
+        }
+        
+        /* Custom popover styles */
+        .popover {
+            max-width: 350px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        
+        .popover-header {
+            background-color: #495057;
+            color: white;
+            border-bottom: 1px solid #555;
+        }
+        
+        .popover-body {
+            max-height: 350px;
+            overflow-y: auto;
+            padding: 12px;
+        }
+        
+        .metadata-section {
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px dotted #ddd;
+        }
+        
+        .metadata-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        
+        .metadata-title {
+            font-weight: bold;
+            margin-bottom: 4px;
+            color: #495057;
+        }
+        
+        .metadata-item {
+            margin-left: 10px;
+            margin-bottom: 3px;
+        }
     </style>
 </head>
 <body>
@@ -131,8 +189,10 @@
         
         function processGpuData() {
             gpuData.forEach(gpu => {
-                // Extract memory bandwidth (use the TransferPCIe field from pcie or memory)
-                if (gpu.benchmarks.memory && gpu.benchmarks.memory.TransferPCIe) {
+                // Extract memory bandwidth (prefer the MemoryBandwidth field from memory)
+                if (gpu.benchmarks.memory && gpu.benchmarks.memory.MemoryBandwidth) {
+                    gpu.memory_bandwidth = gpu.benchmarks.memory.MemoryBandwidth;
+                } else if (gpu.benchmarks.memory && gpu.benchmarks.memory.TransferPCIe) {
                     gpu.memory_bandwidth = gpu.benchmarks.memory.TransferPCIe;
                 } else if (gpu.benchmarks.pcie && gpu.benchmarks.pcie.TransferPCIe) {
                     // Try to parse from raw output if necessary
@@ -203,6 +263,30 @@
                 const vendorClean = gpu.vendor ? gpu.vendor.replace(/[()]/g, '').replace(/\s+/g, '-') : '';
                 gpu.display_name = `${gpu.name}`;
                 gpu.id = `${gpu.name.replace(/\s+/g, '-')}-${vendorClean}`.toLowerCase();
+                
+                // Extract system metadata for tooltips
+                if (gpu.metadata && gpu.metadata.system) {
+                    gpu.systemMetadata = gpu.metadata.system;
+                    // Add contributor and notes if available
+                    if (gpu.metadata.contributor) {
+                        gpu.contributor = gpu.metadata.contributor;
+                    }
+                    if (gpu.metadata.notes) {
+                        gpu.notes = gpu.metadata.notes;
+                    }
+                    if (gpu.metadata.timestamp) {
+                        gpu.timestamp = new Date(gpu.metadata.timestamp).toLocaleDateString();
+                    }
+                } else if (gpu.system) {
+                    // Direct system metadata (from aggregated_results.json)
+                    gpu.systemMetadata = gpu.system;
+                    
+                    // These properties might already exist at the top level in the aggregated format
+                    if (gpu.timestamp) {
+                        gpu.timestamp = new Date(gpu.timestamp).toLocaleDateString();
+                    }
+                    // No need to reassign contributor and notes as they're already at the top level
+                }
             });
         }
         
@@ -332,7 +416,100 @@
                 const row = document.createElement('tr');
                 
                 const nameCell = document.createElement('td');
-                nameCell.textContent = gpu.display_name;
+                
+                // Create a container for name and info icon
+                const nameContainer = document.createElement('div');
+                nameContainer.style.display = 'flex';
+                nameContainer.style.alignItems = 'center';
+                
+                // Create name span
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = gpu.display_name;
+                nameContainer.appendChild(nameSpan);
+                
+                // If we have system metadata, add a popover
+                if (gpu.systemMetadata) {
+                    const infoBtn = document.createElement('button');
+                    infoBtn.type = 'button';
+                    infoBtn.className = 'info-icon border-0';
+                    infoBtn.textContent = '?';
+                    infoBtn.dataset.bsToggle = 'popover';
+                    infoBtn.dataset.bsHtml = 'true';
+                    infoBtn.dataset.bsPlacement = 'top';
+                    infoBtn.dataset.bsTrigger = 'hover focus';
+                    infoBtn.title = 'System Information';
+                    
+                    // Generate popover content HTML
+                    let popoverContent = '';
+                    
+                    // System section
+                    popoverContent += '<div class="metadata-section">';
+                    
+                    // OS info
+                    if (gpu.systemMetadata.os) {
+                        popoverContent += `<div class="metadata-item"><strong>OS:</strong> ${gpu.systemMetadata.os}</div>`;
+                    }
+                    
+                    // CPU info
+                    if (gpu.systemMetadata.cpu) {
+                        let cpuInfo = `<div class="metadata-item"><strong>CPU:</strong> ${gpu.systemMetadata.cpu.model || 'Unknown'}`;
+                        if (gpu.systemMetadata.cpu.processor_count) {
+                            cpuInfo += ` (${gpu.systemMetadata.cpu.processor_count} cores)`;
+                        }
+                        cpuInfo += '</div>';
+                        popoverContent += cpuInfo;
+                    }
+                    
+                    // Memory info
+                    if (gpu.systemMetadata.memory && gpu.systemMetadata.memory.MemTotal) {
+                        const memGB = parseInt(gpu.systemMetadata.memory.MemTotal) / 1024 / 1024;
+                        popoverContent += `<div class="metadata-item"><strong>RAM:</strong> ${memGB.toFixed(1)} GB</div>`;
+                    }
+                    
+                    // GPU info
+                    if (gpu.systemMetadata.gpu) {
+                        popoverContent += `<div class="metadata-item"><strong>GPU:</strong> ${gpu.systemMetadata.gpu.GPU || 'Unknown'}</div>`;
+                        
+                        if (gpu.systemMetadata.gpu.GPUVendor) {
+                            popoverContent += `<div class="metadata-item"><strong>Vendor:</strong> ${gpu.systemMetadata.gpu.GPUVendor}</div>`;
+                        }
+                        
+                        if (gpu.systemMetadata.gpu.Driver && gpu.systemMetadata.gpu.Driver !== 'Unknown') {
+                            popoverContent += `<div class="metadata-item"><strong>Driver:</strong> ${gpu.systemMetadata.gpu.Driver}</div>`;
+                        }
+                        
+                        if (gpu.systemMetadata.gpu.VRAM && gpu.systemMetadata.gpu.VRAM !== 'Unknown') {
+                            popoverContent += `<div class="metadata-item"><strong>VRAM:</strong> ${gpu.systemMetadata.gpu.VRAM}</div>`;
+                        }
+                    }
+                    
+                    popoverContent += '</div>';
+                    
+                    // Contributor info
+                    if (gpu.contributor || gpu.timestamp || gpu.notes) {
+                        popoverContent += '<div class="metadata-section">';
+                        popoverContent += '<div class="metadata-title">Submission Info:</div>';
+                        
+                        if (gpu.contributor) {
+                            popoverContent += `<div class="metadata-item"><strong>Contributor:</strong> ${gpu.contributor}</div>`;
+                        }
+                        
+                        if (gpu.timestamp) {
+                            popoverContent += `<div class="metadata-item"><strong>Date:</strong> ${gpu.timestamp}</div>`;
+                        }
+                        
+                        if (gpu.notes) {
+                            popoverContent += `<div class="metadata-item"><strong>Notes:</strong> ${gpu.notes}</div>`;
+                        }
+                        
+                        popoverContent += '</div>';
+                    }
+                    
+                    infoBtn.dataset.bsContent = popoverContent;
+                    nameContainer.appendChild(infoBtn);
+                }
+                
+                nameCell.appendChild(nameContainer);
                 row.appendChild(nameCell);
                 
                 const memoryCell = document.createElement('td');
@@ -353,6 +530,10 @@
                 
                 tableBody.appendChild(row);
             });
+            
+            // Initialize all popovers after adding them to the DOM
+            const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
+            [...popoverTriggerList].map(popoverTriggerEl => new bootstrap.Popover(popoverTriggerEl));
         }
         
         // Initialize dashboard when page loads
